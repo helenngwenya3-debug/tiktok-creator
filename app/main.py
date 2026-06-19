@@ -41,3 +41,13 @@ def root(request: Request, user=Depends(get_current_user_optional)):
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, user=Depends(get_current_user)):
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms(request: Request):
+    return templates.TemplateResponse("legal/terms.html", {"request": request})
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy(request: Request):
+    return templates.TemplateResponse("legal/privacy.html", {"request": request})

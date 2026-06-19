@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Hugging Face (image generation)
     HUGGINGFACE_API_KEY: str = ""
-    HF_IMAGE_MODEL: str = "stabilityai/stable-diffusion-xl-base-1.0"
+    HF_IMAGE_MODEL: str = "black-forest-labs/FLUX.1-schnell"
 
     # Replicate (AI video generation)
     REPLICATE_API_TOKEN: str = ""
