@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Media Library — TikTok Creator{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold">Media Library</h4>
+    <small class="text-muted">All your images and videos</small>
+  </div>
+  <label class="btn btn-tiktok" style="cursor:pointer">
+    <i class="bi bi-cloud-upload me-2"></i>Upload
+    <input type="file" id="bulk-upload" accept="image/*,video/*" multiple class="d-none" onchange="uploadFiles(this.files)" />
+  </label>
+</div>
+
+<!-- Filter tabs -->
+<ul class="nav nav-pills mb-4">
+  <li class="nav-item"><button class="nav-link active" onclick="filterMedia('all', this)">All</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterMedia('image', this)"><i class="bi bi-image me-1"></i>Images</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="filterMedia('video', this)"><i class="bi bi-camera-video me-1"></i>Videos</button></li>
+</ul>
+
+<!-- Upload progress -->
+<div id="upload-status" class="mb-3"></div>
+
+<!-- Media grid -->
+<div id="media-grid" class="row g-3">
+  {% for item in media_items %}
+  <div class="col-6 col-md-4 col-lg-3 media-item" data-type="{{ item.media_type.value }}">
+    <div class="card position-relative media-card overflow-hidden">
+      {% if item.media_type.value == 'image' %}
+        <img src="/static/uploads/images/{{ item.filename }}" class="media-thumb" style="aspect-ratio:9/16;object-fit:cover;width:100%" />
+      {% else %}
+        <video src="/static/uploads/videos/{{ item.filename }}" class="media-thumb" style="aspect-ratio:9/16;object-fit:cover;width:100%" preload="metadata"></video>
+        <div class="position-absolute top-50 start-50 translate-middle" style="pointer-events:none">
+          <i class="bi bi-play-circle-fill fs-2 text-white opacity-75"></i>
+        </div>
+      {% endif %}
+      <div class="card-body p-2">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <span class="badge {% if item.source == 'generated' %}bg-warning text-dark{% else %}bg-secondary{% endif %} small">{{ item.source }}</span>
+            <span class="badge bg-dark text-muted small ms-1">{{ item.media_type.value }}</span>
+          </div>
+          <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="postMedia({{ item.id }}, '{{ item.media_type.value }}')" title="Post to TikTok">
+              <i class="bi bi-tiktok"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="deleteMedia({{ item.id }}, this)" title="Delete">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </div>
+        {% if item.prompt %}
+        <div class="text-muted mt-1" style="font-size:.7rem;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{ item.prompt }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center py-5 text-muted" id="empty-state">
+    <i class="bi bi-collection fs-1 opacity-25 d-block mb-3"></i>
+    No media yet. <a href="/generate/image" class="text-danger">Generate an image</a> or upload your own.
+  </div>
+  {% endfor %}
+</div>
+
+<style>
+  .nav-pills .nav-link { color:#aaa; background:#1a1a1a; border:1px solid #2a2a2a; margin-right:6px; }
+  .nav-pills .nav-link.active { background:#fe2c55; border-color:#fe2c55; color:#fff; }
+  .media-thumb:hover { opacity:.85; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterMedia(type, btn) {
+  document.querySelectorAll('.nav-pills .nav-link').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.media-item').forEach(el => {
+    el.style.display = (type === 'all' || el.dataset.type === type) ? '' : 'none';
+  });
+}
+
+async function uploadFiles(files) {
+  const status = document.getElementById('upload-status');
+  status.innerHTML = '<div class="alert alert-info py-2"><span class="spinner-border spinner-border-sm me-2"></span>Uploading ' + files.length + ' file(s)...</div>';
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+  try {
+    const resp = await fetch('/media/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    status.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>Uploaded ${data.uploaded.length} file(s). <a href="" class="alert-link">Refresh to see them</a></div>`;
+    setTimeout(() => location.reload(), 1500);
+  } catch(e) {
+    status.innerHTML = `<div class="alert alert-danger py-2">${e.message}</div>`;
+  }
+}
+
+async function deleteMedia(id, btn) {
+  if (!confirm('Delete this media?')) return;
+  const card = btn.closest('.media-item');
+  const resp = await fetch('/media/' + id, { method: 'DELETE' });
+  if (resp.ok) card.remove();
+  else alert('Failed to delete');
+}
+
+function postMedia(id, type) {
+  window.location.href = `/tiktok/post?media=${id}&type=${type}`;
+}
+</script>
+{% endblock %}

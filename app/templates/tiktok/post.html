@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Post to TikTok — TikTok Creator{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold">Post to TikTok</h4>
+    <small class="text-muted">Publish image, slider, or video</small>
+  </div>
+  <a href="/tiktok/settings" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear me-1"></i>TikTok Settings</a>
+</div>
+
+{% if not user.tiktok_access_token %}
+<div class="alert alert-warning mb-4">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  No TikTok token set. <a href="/tiktok/settings" class="alert-link">Add your access token</a> before posting.
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <!-- Post composer -->
+  <div class="col-lg-6">
+    <div class="card p-4">
+      <!-- Post type -->
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Post Type</label>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary flex-fill type-btn active" data-type="image" onclick="selectType('image', this)">
+            <i class="bi bi-image d-block fs-4 mb-1"></i><small>Image</small>
+          </button>
+          <button class="btn btn-outline-secondary flex-fill type-btn" data-type="slider" onclick="selectType('slider', this)">
+            <i class="bi bi-images d-block fs-4 mb-1"></i><small>Slider</small>
+          </button>
+          <button class="btn btn-outline-secondary flex-fill type-btn" data-type="video" onclick="selectType('video', this)">
+            <i class="bi bi-camera-video d-block fs-4 mb-1"></i><small>Video</small>
+          </button>
+        </div>
+      </div>
+
+      <!-- Caption -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Caption <span class="text-danger">*</span></label>
+        <textarea id="caption" class="form-control" rows="3" maxlength="2200" placeholder="Write your caption... #hashtag #fyp"></textarea>
+        <div class="text-end text-muted" style="font-size:.75rem"><span id="caption-count">0</span>/2200</div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold text-muted">Title <span class="small">(optional)</span></label>
+        <input type="text" id="title" class="form-control" maxlength="150" placeholder="Post title..." />
+      </div>
+
+      <button id="publish-btn" class="btn btn-tiktok w-100 py-2 fw-semibold" onclick="publishPost()">
+        <i class="bi bi-send me-2"></i>Publish to TikTok
+      </button>
+
+      <!-- Result -->
+      <div id="publish-result" class="mt-3"></div>
+    </div>
+  </div>
+
+  <!-- Media selector -->
+  <div class="col-lg-6">
+    <div class="card p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <label class="form-label fw-semibold mb-0">Select Media</label>
+        <small class="text-muted">Selected: <span id="sel-count" class="text-danger fw-bold">0</span></small>
+      </div>
+
+      <ul class="nav nav-pills mb-3" id="media-tabs">
+        <li class="nav-item"><button class="nav-link active" onclick="loadMedia('image', this)"><i class="bi bi-image me-1"></i>Images</button></li>
+        <li class="nav-item"><button class="nav-link" onclick="loadMedia('video', this)"><i class="bi bi-camera-video me-1"></i>Videos</button></li>
+      </ul>
+
+      <div id="media-picker" class="row g-2" style="max-height:420px;overflow-y:auto">
+        <div class="text-center text-muted py-4 col-12"><span class="spinner-border spinner-border-sm"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Posts history -->
+<div class="card mt-4">
+  <div class="card-header py-3 px-4"><span class="fw-semibold">Post History</span></div>
+  <div class="card-body p-0">
+    {% if posts %}
+    <table class="table table-dark table-hover mb-0">
+      <thead><tr><th class="px-4">Type</th><th>Caption</th><th>Status</th><th>TikTok ID</th><th>Date</th></tr></thead>
+      <tbody>
+        {% for p in posts %}
+        <tr>
+          <td class="px-4">
+            {% if p.post_type.value == 'video' %}<i class="bi bi-camera-video me-1"></i>
+            {% elif p.post_type.value == 'slider' %}<i class="bi bi-images me-1"></i>
+            {% else %}<i class="bi bi-image me-1"></i>{% endif %}
+            {{ p.post_type.value }}
+          </td>
+          <td class="text-truncate" style="max-width:220px">{{ p.caption or '—' }}</td>
+          <td>
+            {% if p.status.value == 'published' %}<span class="badge bg-success">published</span>
+            {% elif p.status.value == 'failed' %}<span class="badge bg-danger">failed</span>
+            {% else %}<span class="badge bg-secondary">{{ p.status.value }}</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ p.tiktok_post_id or '—' }}</td>
+          <td class="text-muted small">{{ p.created_at.strftime('%d %b %Y') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-5">No posts yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  .form-control, .form-select { background:#111; border:1px solid #333; color:#fff; }
+  .form-control:focus { background:#111; border-color:#fe2c55; color:#fff; box-shadow:0 0 0 2px rgba(254,44,85,.2); }
+  .nav-pills .nav-link { color:#aaa; background:#1a1a1a; border:1px solid #2a2a2a; margin-right:6px; }
+  .nav-pills .nav-link.active { background:#fe2c55; border-color:#fe2c55; color:#fff; }
+  .type-btn.active { background:#fe2c55 !important; border-color:#fe2c55 !important; color:#fff !important; }
+  .picker-thumb { width:100%; aspect-ratio:9/16; object-fit:cover; border-radius:6px; cursor:pointer; border:2px solid transparent; transition:border .15s; }
+  .picker-item.selected .picker-thumb { border-color:#fe2c55; }
+  .picker-item .sel-badge { display:none; position:absolute; top:4px; right:4px; background:#fe2c55; color:#fff; border-radius:50%; width:22px; height:22px; font-size:.7rem; align-items:center; justify-content:center; }
+  .picker-item.selected .sel-badge { display:flex; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedIds = [];
+let currentPostType = 'image';
+let currentMediaType = 'image';
+
+// Pre-select from URL params
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('media')) selectedIds = [parseInt(urlParams.get('media'))];
+if (urlParams.get('type') === 'video') { selectType('video', document.querySelector('[data-type="video"]')); }
+
+function selectType(type, btn) {
+  currentPostType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // auto-switch media tab
+  if (type === 'video') loadMedia('video', document.querySelectorAll('#media-tabs .nav-link')[1]);
+  else loadMedia('image', document.querySelectorAll('#media-tabs .nav-link')[0]);
+}
+
+async function loadMedia(type, btn) {
+  currentMediaType = type;
+  document.querySelectorAll('#media-tabs .nav-link').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const container = document.getElementById('media-picker');
+  container.innerHTML = '<div class="text-center text-muted py-4 col-12"><span class="spinner-border spinner-border-sm"></span></div>';
+  const resp = await fetch('/media/api/list?media_type=' + type);
+  const items = await resp.json();
+  if (!items.length) {
+    container.innerHTML = `<div class="text-center text-muted py-4 col-12">No ${type}s yet. <a href="/generate/${type}" class="text-danger">Create some</a></div>`;
+    return;
+  }
+  const isMulti = currentPostType === 'slider';
+  container.innerHTML = items.map(item => {
+    const isSel = selectedIds.includes(item.id);
+    const tag = type === 'video' ? `<video src="${item.url}" class="picker-thumb" preload="metadata"></video>` : `<img src="${item.url}" class="picker-thumb" />`;
+    return `<div class="col-4 position-relative picker-item ${isSel ? 'selected' : ''}" data-id="${item.id}" onclick="toggleMedia(${item.id}, this)">
+      ${tag}
+      <div class="sel-badge"><i class="bi bi-check"></i></div>
+    </div>`;
+  }).join('');
+  updateCount();
+}
+
+function toggleMedia(id, el) {
+  if (currentPostType !== 'slider') {
+    // single select
+    selectedIds = [id];
+    document.querySelectorAll('.picker-item').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+  } else {
+    const idx = selectedIds.indexOf(id);
+    if (idx === -1) { selectedIds.push(id); el.classList.add('selected'); }
+    else { selectedIds.splice(idx, 1); el.classList.remove('selected'); }
+  }
+  updateCount();
+}
+
+function updateCount() {
+  document.getElementById('sel-count').textContent = selectedIds.length;
+}
+
+document.getElementById('caption').addEventListener('input', function() {
+  document.getElementById('caption-count').textContent = this.value.length;
+});
+
+async function publishPost() {
+  const caption = document.getElementById('caption').value.trim();
+  if (!caption) { alert('Caption is required'); return; }
+  if (!selectedIds.length) { alert('Select at least one media item'); return; }
+
+  const btn = document.getElementById('publish-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publishing...';
+
+  const result = document.getElementById('publish-result');
+  try {
+    const resp = await fetch('/tiktok/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        post_type: currentPostType,
+        caption,
+        title: document.getElementById('title').value,
+        media_ids: selectedIds,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Publish failed');
+    result.innerHTML = `<div class="alert alert-success"><i class="bi bi-check-circle-fill me-2"></i>Posted to TikTok! Publish ID: <code>${data.publish_id}</code></div>`;
+    setTimeout(() => location.reload(), 2000);
+  } catch(e) {
+    result.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-send me-2"></i>Publish to TikTok';
+}
+
+loadMedia('image', document.querySelectorAll('#media-tabs .nav-link')[0]);
+</script>
+{% endblock %}

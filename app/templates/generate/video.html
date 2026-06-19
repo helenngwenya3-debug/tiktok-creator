@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Video Generator — TikTok Creator{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold">Video Generator</h4>
+    <small class="text-muted">AI video or slideshow from your images</small>
+  </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-pills mb-4" id="video-tabs">
+  <li class="nav-item"><button class="nav-link active" onclick="switchTab('slideshow', this)"><i class="bi bi-collection-play me-1"></i>Slideshow from Images</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="switchTab('ai', this)"><i class="bi bi-stars me-1"></i>AI Video (Replicate)</button></li>
+  <li class="nav-item"><button class="nav-link" onclick="switchTab('upload', this)"><i class="bi bi-cloud-upload me-1"></i>Upload Video</button></li>
+</ul>
+
+<!-- Slideshow tab -->
+<div id="tab-slideshow">
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card p-4">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Select Images <span class="text-muted small">(from your library)</span></label>
+          <div id="image-picker" class="row g-2" style="max-height:320px;overflow-y:auto">
+            <div class="text-muted small text-center py-3">Loading images...</div>
+          </div>
+          <small class="text-muted">Selected: <span id="selected-count">0</span></small>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small fw-semibold">Seconds per image</label>
+            <input type="number" id="duration" class="form-control" value="3" min="1" max="10" step="0.5" />
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-semibold">Transition</label>
+            <select id="transition" class="form-select">
+              <option value="fade">Fade</option>
+              <option value="none">None (cut)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-tiktok w-100 py-2" onclick="createSlideshow()">
+          <i class="bi bi-collection-play me-2"></i>Create Slideshow
+        </button>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div id="slideshow-result">
+        <div class="card p-5 text-center text-muted" style="min-height:360px;display:flex;align-items:center;justify-content:center;flex-direction:column">
+          <i class="bi bi-film fs-1 opacity-25 mb-3"></i>
+          <div>Select images and click Create Slideshow</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI Video tab -->
+<div id="tab-ai" class="d-none">
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card p-4">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Video Prompt</label>
+          <textarea id="video-prompt" class="form-control" rows="4" placeholder="A drone flying over a city at night, cinematic, 4K..."></textarea>
+        </div>
+        <div class="mb-4">
+          <label class="form-label small fw-semibold">Duration (seconds)</label>
+          <input type="number" id="video-duration" class="form-control" value="5" min="3" max="15" />
+        </div>
+        <div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>Requires <code>REPLICATE_API_TOKEN</code> in your .env</div>
+        <button class="btn btn-tiktok w-100 py-2" onclick="generateAIVideo()">
+          <i class="bi bi-stars me-2"></i>Generate AI Video
+        </button>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div id="ai-video-result">
+        <div class="card p-5 text-center text-muted" style="min-height:360px;display:flex;align-items:center;justify-content:center;flex-direction:column">
+          <i class="bi bi-camera-video fs-1 opacity-25 mb-3"></i>
+          <div>AI video will appear here (takes 1–3 minutes)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload tab -->
+<div id="tab-upload" class="d-none">
+  <div class="card p-4" style="max-width:500px">
+    <label class="d-block border border-secondary border-dashed rounded p-5 text-center" style="cursor:pointer" id="video-upload-zone">
+      <i class="bi bi-cloud-upload fs-1 text-muted d-block mb-2"></i>
+      <div class="fw-semibold">Upload your video</div>
+      <div class="text-muted small mt-1">MP4, MOV, WebM — up to 500MB</div>
+      <input type="file" id="video-upload-input" accept="video/*" class="d-none" onchange="uploadVideo(this.files)" />
+    </label>
+    <div id="upload-progress" class="mt-3"></div>
+  </div>
+</div>
+
+<style>
+  .form-control, .form-select { background:#111; border:1px solid #333; color:#fff; }
+  .form-control:focus, .form-select:focus { background:#111; border-color:#fe2c55; color:#fff; box-shadow:0 0 0 2px rgba(254,44,85,.2); }
+  .nav-pills .nav-link { color:#aaa; background:#1a1a1a; border:1px solid #2a2a2a; margin-right:6px; }
+  .nav-pills .nav-link.active { background:#fe2c55; border-color:#fe2c55; color:#fff; }
+  .img-picker-item { cursor:pointer; border-radius:8px; overflow:hidden; border:2px solid transparent; transition:border .15s; }
+  .img-picker-item.selected { border-color:#fe2c55; }
+  .border-dashed { border-style:dashed !important; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedImages = [];
+
+function switchTab(name, btn) {
+  ['slideshow','ai','upload'].forEach(t => document.getElementById('tab-' + t).classList.add('d-none'));
+  document.getElementById('tab-' + name).classList.remove('d-none');
+  document.querySelectorAll('#video-tabs .nav-link').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function loadImages() {
+  const resp = await fetch('/media/api/list?media_type=image');
+  const images = await resp.json();
+  const container = document.getElementById('image-picker');
+  if (!images.length) {
+    container.innerHTML = '<div class="text-muted small text-center py-3 col-12">No images yet. <a href="/generate/image" class="text-danger">Generate some</a></div>';
+    return;
+  }
+  container.innerHTML = images.map(img => `
+    <div class="col-4">
+      <div class="img-picker-item" data-id="${img.id}" onclick="toggleImage(${img.id}, this)">
+        <img src="${img.url}" class="w-100" style="aspect-ratio:1;object-fit:cover" />
+      </div>
+    </div>`).join('');
+}
+
+function toggleImage(id, el) {
+  const idx = selectedImages.indexOf(id);
+  if (idx === -1) { selectedImages.push(id); el.classList.add('selected'); }
+  else { selectedImages.splice(idx, 1); el.classList.remove('selected'); }
+  document.getElementById('selected-count').textContent = selectedImages.length;
+}
+
+async function createSlideshow() {
+  if (selectedImages.length < 2) { alert('Select at least 2 images'); return; }
+  const resultDiv = document.getElementById('slideshow-result');
+  resultDiv.innerHTML = `<div class="card p-5 text-center"><div class="spinner-border text-danger mb-3" style="width:3rem;height:3rem"></div><div class="text-muted">Creating slideshow video…</div></div>`;
+  try {
+    const resp = await fetch('/generate/video/slideshow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        media_ids: selectedImages,
+        duration_per_image: parseFloat(document.getElementById('duration').value),
+        fps: 24,
+        transition: document.getElementById('transition').value,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Failed');
+    resultDiv.innerHTML = `
+      <div class="card overflow-hidden">
+        <video src="${data.url}" controls class="w-100" style="max-height:500px;background:#000"></video>
+        <div class="card-body d-flex gap-2">
+          <a href="${data.url}" download class="btn btn-outline-light btn-sm flex-grow-1"><i class="bi bi-download me-1"></i>Download</a>
+          <button class="btn btn-tiktok btn-sm flex-grow-1" onclick="window.location='/tiktok/post?media=${data.id}'"><i class="bi bi-tiktok me-1"></i>Post to TikTok</button>
+        </div>
+      </div>`;
+  } catch(e) {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+}
+
+async function generateAIVideo() {
+  const prompt = document.getElementById('video-prompt').value.trim();
+  if (!prompt) { alert('Enter a prompt'); return; }
+  const resultDiv = document.getElementById('ai-video-result');
+  resultDiv.innerHTML = `<div class="card p-5 text-center"><div class="spinner-border text-danger mb-3" style="width:3rem;height:3rem"></div><div class="text-muted">Generating AI video… (1–3 minutes)</div></div>`;
+  try {
+    const resp = await fetch('/generate/video/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, duration: parseInt(document.getElementById('video-duration').value) }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Failed');
+    resultDiv.innerHTML = `
+      <div class="card overflow-hidden">
+        <video src="${data.url}" controls class="w-100" style="max-height:500px;background:#000"></video>
+        <div class="card-body d-flex gap-2">
+          <a href="${data.url}" download class="btn btn-outline-light btn-sm flex-grow-1"><i class="bi bi-download me-1"></i>Download</a>
+          <button class="btn btn-tiktok btn-sm flex-grow-1" onclick="window.location='/tiktok/post?media=${data.id}'"><i class="bi bi-tiktok me-1"></i>Post to TikTok</button>
+        </div>
+      </div>`;
+  } catch(e) {
+    resultDiv.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+}
+
+async function uploadVideo(files) {
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+  const prog = document.getElementById('upload-progress');
+  prog.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Uploading...</div>';
+  const resp = await fetch('/media/upload', { method: 'POST', body: formData });
+  const data = await resp.json();
+  prog.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>Uploaded ${data.uploaded.length} video(s). <a href="/media/library" class="alert-link">View library</a></div>`;
+}
+
+const vzone = document.getElementById('video-upload-zone');
+vzone.addEventListener('dragover', e => { e.preventDefault(); vzone.classList.add('border-danger'); });
+vzone.addEventListener('dragleave', () => vzone.classList.remove('border-danger'));
+vzone.addEventListener('drop', e => { e.preventDefault(); vzone.classList.remove('border-danger'); uploadVideo(e.dataTransfer.files); });
+
+loadImages();
+</script>
+{% endblock %}

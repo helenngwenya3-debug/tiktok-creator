@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — TikTok Creator{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold">Dashboard</h4>
+    <small class="text-muted">Welcome back, {{ user.username }}</small>
+  </div>
+  <a href="/tiktok/post" class="btn btn-tiktok"><i class="bi bi-send me-2"></i>New Post</a>
+</div>
+
+<!-- Stats row -->
+<div class="row g-3 mb-4" id="stats-row">
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted small mb-1"><i class="bi bi-images me-1"></i>Images</div>
+      <div class="fs-3 fw-bold" id="stat-images">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted small mb-1"><i class="bi bi-camera-video me-1"></i>Videos</div>
+      <div class="fs-3 fw-bold" id="stat-videos">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted small mb-1"><i class="bi bi-check-circle me-1 text-success"></i>Published</div>
+      <div class="fs-3 fw-bold text-success" id="stat-published">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted small mb-1"><i class="bi bi-x-circle me-1 text-danger"></i>Failed</div>
+      <div class="fs-3 fw-bold text-danger" id="stat-failed">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <a href="/generate/image" class="card text-decoration-none p-4 d-flex flex-row align-items-center gap-3 hover-card">
+      <div class="fs-1 text-warning"><i class="bi bi-stars"></i></div>
+      <div>
+        <div class="fw-semibold">AI Image</div>
+        <div class="text-muted small">Generate from prompt</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="/generate/video" class="card text-decoration-none p-4 d-flex flex-row align-items-center gap-3 hover-card">
+      <div class="fs-1 text-info"><i class="bi bi-camera-video-fill"></i></div>
+      <div>
+        <div class="fw-semibold">AI Video</div>
+        <div class="text-muted small">Generate or slideshow</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="/media/library" class="card text-decoration-none p-4 d-flex flex-row align-items-center gap-3 hover-card">
+      <div class="fs-1 text-success"><i class="bi bi-cloud-upload-fill"></i></div>
+      <div>
+        <div class="fw-semibold">Upload Media</div>
+        <div class="text-muted small">Images & videos</div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Recent posts -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center py-3 px-4">
+    <span class="fw-semibold">Recent TikTok Posts</span>
+    <a href="/tiktok/post" class="btn btn-sm btn-outline-danger">View All</a>
+  </div>
+  <div class="card-body p-0">
+    <div id="recent-posts">
+      <div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm text-danger me-2"></div>Loading...</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hover-card { transition: border-color .2s; border: 1px solid #2a2a2a; }
+  .hover-card:hover { border-color: #fe2c55; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+  const [mediaResp, postsResp] = await Promise.all([
+    fetch('/media/api/list'),
+    fetch('/tiktok/posts/api'),
+  ]);
+  const media = await mediaResp.json();
+  const posts = await postsResp.json();
+
+  document.getElementById('stat-images').textContent = media.filter(m => m.type === 'image').length;
+  document.getElementById('stat-videos').textContent = media.filter(m => m.type === 'video').length;
+  document.getElementById('stat-published').textContent = posts.filter(p => p.status === 'published').length;
+  document.getElementById('stat-failed').textContent = posts.filter(p => p.status === 'failed').length;
+
+  const container = document.getElementById('recent-posts');
+  if (!posts.length) {
+    container.innerHTML = '<div class="text-center text-muted py-5">No posts yet. <a href="/tiktok/post" class="text-danger">Create your first post</a></div>';
+    return;
+  }
+
+  const typeIcon = { video: 'bi-camera-video', image: 'bi-image', slider: 'bi-images' };
+  const statusBadge = { published: 'success', failed: 'danger', draft: 'secondary', scheduled: 'warning' };
+
+  container.innerHTML = `
+    <table class="table table-dark table-hover mb-0">
+      <thead><tr>
+        <th class="px-4">Type</th><th>Caption</th><th>Status</th><th>Date</th>
+      </tr></thead>
+      <tbody>
+        ${posts.slice(0, 10).map(p => `
+          <tr>
+            <td class="px-4"><i class="bi ${typeIcon[p.post_type] || 'bi-file'} me-2"></i>${p.post_type}</td>
+            <td class="text-truncate" style="max-width:250px">${p.caption || '—'}</td>
+            <td><span class="badge bg-${statusBadge[p.status] || 'secondary'}">${p.status}</span></td>
+            <td class="text-muted small">${new Date(p.created_at).toLocaleDateString()}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+loadDashboard();
+</script>
+{% endblock %}

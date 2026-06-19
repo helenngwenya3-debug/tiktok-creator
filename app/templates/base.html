@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}TikTok Creator{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <style>
+    body { background: #0d0d0d; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+    .sidebar { width: 240px; min-height: 100vh; background: #111; border-right: 1px solid #222; position: fixed; top: 0; left: 0; padding: 1.5rem 1rem; z-index: 100; }
+    .sidebar .brand { font-size: 1.3rem; font-weight: 700; color: #fe2c55; margin-bottom: 2rem; display: flex; align-items: center; gap: 8px; }
+    .sidebar .nav-link { color: #aaa; border-radius: 8px; padding: .6rem 1rem; margin-bottom: 2px; transition: all .2s; }
+    .sidebar .nav-link:hover, .sidebar .nav-link.active { background: #1e1e1e; color: #fff; }
+    .sidebar .nav-link i { width: 20px; text-align: center; margin-right: 8px; }
+    .main-content { margin-left: 240px; padding: 2rem; min-height: 100vh; }
+    .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
+    .card-header { background: #111; border-bottom: 1px solid #2a2a2a; }
+    .btn-tiktok { background: #fe2c55; border: none; color: #fff; }
+    .btn-tiktok:hover { background: #d4243f; color: #fff; }
+    .badge-status-published { background: #198754; }
+    .badge-status-failed { background: #dc3545; }
+    .badge-status-draft { background: #6c757d; }
+    .media-thumb { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: border .2s; }
+    .media-thumb.selected { border-color: #fe2c55; }
+    .media-card { position: relative; }
+    .media-card .check-overlay { position: absolute; top: 6px; right: 6px; display: none; }
+    .media-card.selected .check-overlay { display: block; }
+    .spinner-tiktok { color: #fe2c55; }
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; min-height: auto; position: relative; }
+      .main-content { margin-left: 0; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if user is defined and user %}
+  <nav class="sidebar d-flex flex-column">
+    <div class="brand"><i class="bi bi-play-circle-fill"></i> TikTok Creator</div>
+    <ul class="nav flex-column flex-grow-1">
+      <li class="nav-item"><a class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+      <li class="nav-item mt-2"><small class="text-muted px-3">CREATE</small></li>
+      <li class="nav-item"><a class="nav-link {% if '/generate/image' in request.url.path %}active{% endif %}" href="/generate/image"><i class="bi bi-image"></i> Image Generator</a></li>
+      <li class="nav-item"><a class="nav-link {% if '/generate/video' in request.url.path %}active{% endif %}" href="/generate/video"><i class="bi bi-camera-video"></i> Video Generator</a></li>
+      <li class="nav-item mt-2"><small class="text-muted px-3">MEDIA</small></li>
+      <li class="nav-item"><a class="nav-link {% if '/media/library' in request.url.path %}active{% endif %}" href="/media/library"><i class="bi bi-collection"></i> Media Library</a></li>
+      <li class="nav-item mt-2"><small class="text-muted px-3">PUBLISH</small></li>
+      <li class="nav-item"><a class="nav-link {% if '/tiktok/post' in request.url.path %}active{% endif %}" href="/tiktok/post"><i class="bi bi-tiktok"></i> Post to TikTok</a></li>
+      <li class="nav-item"><a class="nav-link {% if '/tiktok/settings' in request.url.path %}active{% endif %}" href="/tiktok/settings"><i class="bi bi-gear"></i> TikTok Settings</a></li>
+    </ul>
+    <div class="mt-auto pt-3 border-top border-secondary">
+      <small class="text-muted d-block px-2">{{ user.username }}</small>
+      <a href="/auth/logout" class="nav-link text-danger mt-1"><i class="bi bi-box-arrow-left"></i> Logout</a>
+    </div>
+  </nav>
+  {% endif %}
+
+  <main class="{% if user is defined and user %}main-content{% else %}container-fluid{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

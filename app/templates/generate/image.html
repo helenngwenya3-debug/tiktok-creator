@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Image Generator — TikTok Creator{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0 fw-bold">AI Image Generator</h4>
+    <small class="text-muted">Generate images with Stable Diffusion</small>
+  </div>
+  <a href="/media/library" class="btn btn-outline-secondary btn-sm"><i class="bi bi-collection me-1"></i>Media Library</a>
+</div>
+
+<div class="row g-4">
+  <!-- Generator form -->
+  <div class="col-lg-5">
+    <div class="card p-4">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Prompt <span class="text-danger">*</span></label>
+        <textarea id="prompt" class="form-control" rows="4" placeholder="A stunning sunset over Cape Town with Table Mountain, cinematic, 4K..."></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold text-muted">Negative Prompt</label>
+        <textarea id="negative_prompt" class="form-control" rows="2" placeholder="blurry, low quality, text, watermark..."></textarea>
+      </div>
+      <div class="row g-2 mb-4">
+        <div class="col-6">
+          <label class="form-label fw-semibold small">Width</label>
+          <select id="width" class="form-select">
+            <option value="768">768px</option>
+            <option value="1024" selected>1024px</option>
+            <option value="1080">1080px</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label class="form-label fw-semibold small">Height</label>
+          <select id="height" class="form-select">
+            <option value="768">768px</option>
+            <option value="1024" selected>1024px</option>
+            <option value="1920">1920px (9:16)</option>
+          </select>
+        </div>
+      </div>
+      <button id="generate-btn" class="btn btn-tiktok w-100 py-2" onclick="generateImage()">
+        <i class="bi bi-stars me-2"></i>Generate Image
+      </button>
+
+      <hr class="my-4 border-secondary" />
+
+      <!-- Upload own image -->
+      <div class="text-muted small mb-2 fw-semibold">Or upload your own image</div>
+      <label class="d-block border border-secondary border-dashed rounded p-3 text-center" style="cursor:pointer" id="upload-zone">
+        <i class="bi bi-cloud-upload fs-3 text-muted d-block mb-1"></i>
+        <span class="text-muted small">Click to upload or drag & drop</span>
+        <input type="file" id="upload-input" accept="image/*" multiple class="d-none" onchange="uploadFiles(this.files)" />
+      </label>
+    </div>
+  </div>
+
+  <!-- Result panel -->
+  <div class="col-lg-7">
+    <div id="result-area">
+      <div class="card p-5 text-center text-muted h-100 d-flex flex-column align-items-center justify-content-center" style="min-height:400px">
+        <i class="bi bi-image fs-1 mb-3 opacity-25"></i>
+        <div>Your generated image will appear here</div>
+      </div>
+    </div>
+
+    <!-- Upload results -->
+    <div id="upload-results" class="mt-3 row g-2"></div>
+  </div>
+</div>
+
+<style>
+  .form-control, .form-select { background:#111; border:1px solid #333; color:#fff; }
+  .form-control:focus, .form-select:focus { background:#111; border-color:#fe2c55; color:#fff; box-shadow:0 0 0 2px rgba(254,44,85,.2); }
+  .border-dashed { border-style: dashed !important; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function generateImage() {
+  const btn = document.getElementById('generate-btn');
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) { alert('Please enter a prompt'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+  document.getElementById('result-area').innerHTML = `
+    <div class="card p-5 text-center" style="min-height:400px">
+      <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5">
+        <div class="spinner-border text-danger mb-3" style="width:3rem;height:3rem"></div>
+        <div class="text-muted">Generating your image… this may take 30–60 seconds</div>
+      </div>
+    </div>`;
+
+  try {
+    const resp = await fetch('/generate/image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        negative_prompt: document.getElementById('negative_prompt').value,
+        width: parseInt(document.getElementById('width').value),
+        height: parseInt(document.getElementById('height').value),
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Generation failed');
+    document.getElementById('result-area').innerHTML = `
+      <div class="card overflow-hidden">
+        <img src="${data.url}" class="w-100" style="max-height:600px;object-fit:contain;background:#000" />
+        <div class="card-body d-flex gap-2">
+          <a href="${data.url}" download class="btn btn-outline-light btn-sm flex-grow-1"><i class="bi bi-download me-1"></i>Download</a>
+          <button class="btn btn-tiktok btn-sm flex-grow-1" onclick="postNow(${data.id})"><i class="bi bi-tiktok me-1"></i>Post to TikTok</button>
+        </div>
+      </div>`;
+  } catch(e) {
+    document.getElementById('result-area').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-stars me-2"></i>Generate Image';
+}
+
+async function uploadFiles(files) {
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+  const resp = await fetch('/media/upload', { method: 'POST', body: formData });
+  const data = await resp.json();
+  const container = document.getElementById('upload-results');
+  for (const item of data.uploaded) {
+    const col = document.createElement('div');
+    col.className = 'col-6 col-md-4';
+    col.innerHTML = `<div class="card p-2 text-center"><img src="/static/uploads/images/${item.filename}" class="w-100 rounded mb-1" style="aspect-ratio:1;object-fit:cover" /><small class="text-success"><i class="bi bi-check-circle me-1"></i>Uploaded</small></div>`;
+    container.prepend(col);
+  }
+}
+
+function postNow(mediaId) {
+  window.location.href = `/tiktok/post?media=${mediaId}`;
+}
+
+// Drag & drop
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('border-danger'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('border-danger'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('border-danger'); uploadFiles(e.dataTransfer.files); });
+</script>
+{% endblock %}
