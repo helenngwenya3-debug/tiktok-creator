@@ -9,33 +9,64 @@ settings = get_settings()
 
 
 async def create_slideshow_video(image_paths: List[str], duration_per_image: float = 3.0, fps: int = 24, transition: str = "fade") -> tuple[str, str]:
-    """Create a video slideshow from a list of images using MoviePy."""
-    from moviepy.editor import ImageClip, concatenate_videoclips, VideoFileClip
-    from moviepy.video.fx.all import fadein, fadeout
+    """Create a vertical (1080x1920) TikTok slideshow video from a list of images.
 
-    clips = []
-    for img_path in image_paths:
-        clip = ImageClip(img_path, duration=duration_per_image)
-        clip = clip.resize(height=1920).crop(x_center=clip.w / 2, y_center=clip.h / 2, width=1080, height=1920)
-        if transition == "fade":
-            clip = clip.fadein(0.5).fadeout(0.5)
-        clips.append(clip)
+    Uses imageio + Pillow (no MoviePy) so it stays compatible with modern Pillow/numpy.
+    """
+    import imageio.v2 as imageio
+    import numpy as np
+    from PIL import Image
 
-    final = concatenate_videoclips(clips, method="compose")
+    W, H = 1080, 1920
+    frames_per_image = max(1, int(round(fps * duration_per_image)))
+    fade_frames = int(fps * 0.5) if transition == "fade" else 0
 
-    filename = f"{uuid.uuid4()}.mp4"
-    upload_dir = Path(settings.UPLOAD_DIR) / "videos"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / filename
+    def _render() -> tuple[str, str]:
+        # Pre-render each image to a 1080x1920 RGB frame (center-crop "cover" fit)
+        rendered = []
+        for img_path in image_paths:
+            im = Image.open(img_path).convert("RGB")
+            src_ratio = im.width / im.height
+            dst_ratio = W / H
+            if src_ratio > dst_ratio:
+                new_w, new_h = int(round(H * src_ratio)), H
+            else:
+                new_w, new_h = W, int(round(W / src_ratio))
+            im = im.resize((new_w, new_h), Image.LANCZOS)
+            left, top = (new_w - W) // 2, (new_h - H) // 2
+            im = im.crop((left, top, left + W, top + H))
+            rendered.append(np.asarray(im, dtype=np.uint8))
 
-    # Run in thread pool to avoid blocking
+        filename = f"{uuid.uuid4()}.mp4"
+        upload_dir = Path(settings.UPLOAD_DIR) / "videos"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        file_path = upload_dir / filename
+
+        writer = imageio.get_writer(
+            str(file_path), fps=fps, codec="libx264",
+            quality=8, pixelformat="yuv420p", macro_block_size=None,
+        )
+        try:
+            for frame in rendered:
+                for f in range(frames_per_image):
+                    out = frame
+                    if fade_frames > 0:
+                        if f < fade_frames:
+                            alpha = f / fade_frames
+                        elif f >= frames_per_image - fade_frames:
+                            alpha = (frames_per_image - 1 - f) / fade_frames
+                        else:
+                            alpha = 1.0
+                        if alpha < 1.0:
+                            out = (frame.astype(np.float32) * alpha).astype(np.uint8)
+                    writer.append_data(out)
+        finally:
+            writer.close()
+
+        return str(file_path), filename
+
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(
-        None,
-        lambda: final.write_videofile(str(file_path), fps=fps, codec="libx264", audio=False, verbose=False, logger=None),
-    )
-
-    return str(file_path), filename
+    return await loop.run_in_executor(None, _render)
 
 
 async def generate_ai_video_replicate(prompt: str, duration: int = 5) -> tuple[str, str]:
@@ -62,6 +93,9 @@ async def generate_ai_video_replicate(prompt: str, duration: int = 5) -> tuple[s
     async with httpx.AsyncClient(timeout=300.0) as client:
         resp = await client.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload)
         prediction = resp.json()
+        if resp.status_code >= 400 or "id" not in prediction:
+            detail = prediction.get("detail") or prediction.get("title") or resp.text
+            raise RuntimeError(f"Replicate API error ({resp.status_code}): {detail}")
         prediction_id = prediction["id"]
 
         for _ in range(100):
