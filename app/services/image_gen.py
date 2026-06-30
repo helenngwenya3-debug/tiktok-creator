@@ -13,7 +13,7 @@ async def generate_image_hf(prompt: str, negative_prompt: str = "", width: int =
     if not settings.HUGGINGFACE_API_KEY:
         raise ValueError("HUGGINGFACE_API_KEY not configured")
 
-    api_url = f"https://api-inference.huggingface.co/models/{settings.HF_IMAGE_MODEL}"
+    api_url = f"https://router.huggingface.co/hf-inference/models/{settings.HF_IMAGE_MODEL}"
     headers = {"Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}"}
     payload = {
         "inputs": prompt,
