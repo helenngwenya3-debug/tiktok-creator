@@ -40,6 +40,32 @@
           </select>
         </div>
       </div>
+      <!-- Reference image (image-to-image) -->
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Reference image <span class="text-muted small">(optional — image-to-image)</span></label>
+        <label id="ref-zone" class="d-block border border-secondary border-dashed rounded p-3 text-center" style="cursor:pointer">
+          <div id="ref-empty">
+            <i class="bi bi-image fs-4 text-muted d-block mb-1"></i>
+            <span class="text-muted small">Click to add a reference image</span>
+          </div>
+          <img id="ref-preview" class="rounded d-none" style="max-height:150px;object-fit:contain" />
+          <input type="file" id="ref-input" accept="image/*" class="d-none" onchange="setReference(this.files[0])" />
+        </label>
+        <div id="ref-controls" class="mt-2 d-none">
+          <div class="d-flex justify-content-between">
+            <label class="form-label small fw-semibold mb-1">Transformation strength</label>
+            <span class="small text-muted" id="strength-val">0.75</span>
+          </div>
+          <input type="range" id="strength" class="form-range" min="0.3" max="0.95" step="0.05" value="0.75"
+                 oninput="document.getElementById('strength-val').textContent=this.value" />
+          <div class="d-flex justify-content-between small text-muted"><span>↤ Closer to reference</span><span>More creative ↦</span></div>
+          <div class="d-flex justify-content-between align-items-center mt-1">
+            <span class="small text-warning"><i class="bi bi-info-circle me-1"></i>Uses Replicate (~$0.03/image)</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearReference()"><i class="bi bi-x"></i> Remove</button>
+          </div>
+        </div>
+      </div>
+
       <button id="generate-btn" class="btn btn-tiktok w-100 py-2" onclick="generateImage()">
         <i class="bi bi-stars me-2"></i>Generate Image
       </button>
@@ -79,6 +105,26 @@
 
 {% block scripts %}
 <script>
+let referenceFile = null;
+
+function setReference(file) {
+  if (!file) return;
+  referenceFile = file;
+  const img = document.getElementById('ref-preview');
+  img.src = URL.createObjectURL(file);
+  img.classList.remove('d-none');
+  document.getElementById('ref-empty').classList.add('d-none');
+  document.getElementById('ref-controls').classList.remove('d-none');
+}
+
+function clearReference() {
+  referenceFile = null;
+  document.getElementById('ref-input').value = '';
+  document.getElementById('ref-preview').classList.add('d-none');
+  document.getElementById('ref-empty').classList.remove('d-none');
+  document.getElementById('ref-controls').classList.add('d-none');
+}
+
 async function generateImage() {
   const btn = document.getElementById('generate-btn');
   const prompt = document.getElementById('prompt').value.trim();
@@ -95,16 +141,27 @@ async function generateImage() {
     </div>`;
 
   try {
-    const resp = await fetch('/generate/image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        negative_prompt: document.getElementById('negative_prompt').value,
-        width: parseInt(document.getElementById('width').value),
-        height: parseInt(document.getElementById('height').value),
-      }),
-    });
+    let resp;
+    if (referenceFile) {
+      // image-to-image via Replicate
+      const fd = new FormData();
+      fd.append('prompt', prompt);
+      fd.append('strength', document.getElementById('strength').value);
+      fd.append('reference', referenceFile);
+      resp = await fetch('/generate/image/img2img', { method: 'POST', body: fd });
+    } else {
+      // text-to-image via Hugging Face
+      resp = await fetch('/generate/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          negative_prompt: document.getElementById('negative_prompt').value,
+          width: parseInt(document.getElementById('width').value),
+          height: parseInt(document.getElementById('height').value),
+        }),
+      });
+    }
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || 'Generation failed');
     document.getElementById('result-area').innerHTML = `

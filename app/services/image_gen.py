@@ -44,6 +44,63 @@ async def generate_image_hf(prompt: str, negative_prompt: str = "", width: int =
     return str(file_path), filename
 
 
+async def generate_image_img2img_replicate(prompt: str, image_bytes: bytes, strength: float = 0.8) -> tuple[str, str]:
+    """Image-to-image generation via Replicate FLUX-dev (reference image + prompt).
+
+    strength (prompt_strength): 0 = stay close to the reference, 1 = follow the prompt freely.
+    """
+    if not settings.REPLICATE_API_TOKEN:
+        raise ValueError("REPLICATE_API_TOKEN not configured")
+
+    import asyncio
+
+    data_uri = "data:image/png;base64," + base64.b64encode(image_bytes).decode()
+    headers = {
+        "Authorization": f"Bearer {settings.REPLICATE_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "input": {
+            "prompt": prompt,
+            "image": data_uri,
+            "prompt_strength": strength,
+            "aspect_ratio": "match_input_image",
+            "output_format": "png",
+            "num_outputs": 1,
+        }
+    }
+    url = "https://api.replicate.com/v1/models/black-forest-labs/flux-dev/predictions"
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        prediction = resp.json()
+        if resp.status_code >= 400 or "id" not in prediction:
+            detail = prediction.get("detail") or prediction.get("title") or resp.text
+            raise RuntimeError(f"Replicate API error ({resp.status_code}): {detail}")
+
+        get_url = prediction["urls"]["get"]
+        for _ in range(90):
+            await asyncio.sleep(2)
+            poll = await client.get(get_url, headers=headers)
+            data = poll.json()
+            status = data.get("status")
+            if status == "succeeded":
+                out = data["output"]
+                image_url = out[0] if isinstance(out, list) else out
+                img_resp = await client.get(image_url)
+                filename = f"{uuid.uuid4()}.png"
+                upload_dir = Path(settings.UPLOAD_DIR) / "images"
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                file_path = upload_dir / filename
+                with open(file_path, "wb") as f:
+                    f.write(img_resp.content)
+                return str(file_path), filename
+            elif status in ("failed", "canceled"):
+                raise RuntimeError(f"Replicate img2img failed: {data.get('error')}")
+
+    raise RuntimeError("Image generation timed out")
+
+
 async def generate_image_replicate(prompt: str, negative_prompt: str = "") -> tuple[str, str]:
     """Generate image via Replicate API as fallback."""
     if not settings.REPLICATE_API_TOKEN:

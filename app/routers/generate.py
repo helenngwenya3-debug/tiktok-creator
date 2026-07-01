@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, Request, BackgroundTasks, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -59,6 +59,47 @@ async def generate_image(
             "url": f"/static/uploads/images/{filename}",
             "prompt": body.prompt,
         })
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.post("/image/img2img")
+async def generate_image_img2img(
+    prompt: str = Form(...),
+    strength: float = Form(0.8),
+    reference: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    if not settings.REPLICATE_API_TOKEN:
+        raise HTTPException(400, "REPLICATE_API_TOKEN not configured. Add it in Railway variables.")
+    try:
+        image_bytes = await reference.read()
+        if not image_bytes:
+            raise HTTPException(400, "Reference image is empty")
+        file_path, filename = await image_gen.generate_image_img2img_replicate(prompt, image_bytes, strength)
+
+        media = Media(
+            user_id=user.id,
+            filename=filename,
+            original_name=filename,
+            file_path=file_path,
+            media_type=MediaType.image,
+            prompt=prompt,
+            source="generated",
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        return JSONResponse({
+            "id": media.id,
+            "filename": filename,
+            "url": f"/static/uploads/images/{filename}",
+            "prompt": prompt,
+        })
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
 
