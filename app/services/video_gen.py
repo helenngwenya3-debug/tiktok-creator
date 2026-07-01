@@ -21,33 +21,36 @@ async def create_slideshow_video(image_paths: List[str], duration_per_image: flo
     frames_per_image = max(1, int(round(fps * duration_per_image)))
     fade_frames = int(fps * 0.5) if transition == "fade" else 0
 
-    def _render() -> tuple[str, str]:
-        # Pre-render each image to a 1080x1920 RGB frame (center-crop "cover" fit)
-        rendered = []
-        for img_path in image_paths:
-            im = Image.open(img_path).convert("RGB")
-            src_ratio = im.width / im.height
-            dst_ratio = W / H
-            if src_ratio > dst_ratio:
-                new_w, new_h = int(round(H * src_ratio)), H
-            else:
-                new_w, new_h = W, int(round(W / src_ratio))
-            im = im.resize((new_w, new_h), Image.LANCZOS)
-            left, top = (new_w - W) // 2, (new_h - H) // 2
-            im = im.crop((left, top, left + W, top + H))
-            rendered.append(np.asarray(im, dtype=np.uint8))
+    def _cover_frame(img_path: str) -> "np.ndarray":
+        """Load an image and center-crop ("cover" fit) to a 1080x1920 RGB frame."""
+        im = Image.open(img_path).convert("RGB")
+        src_ratio = im.width / im.height
+        dst_ratio = W / H
+        if src_ratio > dst_ratio:
+            new_w, new_h = int(round(H * src_ratio)), H
+        else:
+            new_w, new_h = W, int(round(W / src_ratio))
+        im = im.resize((new_w, new_h), Image.LANCZOS)
+        left, top = (new_w - W) // 2, (new_h - H) // 2
+        im = im.crop((left, top, left + W, top + H))
+        return np.asarray(im, dtype=np.uint8)
 
+    def _render() -> tuple[str, str]:
         filename = f"{uuid.uuid4()}.mp4"
         upload_dir = Path(settings.UPLOAD_DIR) / "videos"
         upload_dir.mkdir(parents=True, exist_ok=True)
         file_path = upload_dir / filename
 
+        # ultrafast + single thread keeps x264 memory low enough for small containers
         writer = imageio.get_writer(
             str(file_path), fps=fps, codec="libx264",
             quality=8, pixelformat="yuv420p", macro_block_size=None,
+            output_params=["-preset", "ultrafast", "-threads", "1"],
         )
         try:
-            for frame in rendered:
+            # Render one image at a time (never hold all frames in memory)
+            for img_path in image_paths:
+                frame = _cover_frame(img_path)
                 for f in range(frames_per_image):
                     out = frame
                     if fade_frames > 0:
